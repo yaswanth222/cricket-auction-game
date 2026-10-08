@@ -1,1 +1,54 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cricket Auction Online</title><script src="/socket.io/socket.io.js"></script>
+<style>
+body{font-family:Arial,sans-serif;background:#0d1117;color:#f5f7fa;margin:0}.wrap{max-width:900px;margin:auto;padding:24px}
+.card{background:#161b22;border:1px solid #30363d;border-radius:16px;padding:18px;margin:12px 0}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.stat{background:#0d1117;border-radius:12px;padding:12px}.stat b{display:block;font-size:22px;margin-top:4px}.player{text-align:center;padding:28px}.name{font-size:32px;font-weight:800}.price{font-size:42px;font-weight:900;margin:12px}
+button,input{font-size:16px;padding:12px;border-radius:10px;border:1px solid #444;background:#222;color:#fff}button{cursor:pointer;margin:4px}button.primary{background:#2563eb;border-color:#2563eb}.actions{display:flex;flex-wrap:wrap;justify-content:center}.teams{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid #30363d;text-align:left}.muted{color:#9da7b3}.hidden{display:none}.roomrow{display:flex;gap:8px;flex-wrap:wrap}
+@media(max-width:600px){.grid,.teams{grid-template-columns:1fr}.name{font-size:25px}}
+</style></head><body><main class="wrap">
+<h1>🏏 Cricket Auction Online</h1><p class="muted">Real-time 2-player auction • ₹20 each • 30 players • Max 10 per squad • 1 WK required</p>
 
+<div id="lobby" class="card">
+<h2>Join a Game</h2><div class="roomrow"><button class="primary" id="create">Create Room</button>
+<input id="roomInput" placeholder="Room code"><button id="join">Join Room</button></div>
+<p id="lobbyMsg" class="muted"></p>
+</div>
+
+<div id="game" class="hidden">
+<div class="card"><div class="grid">
+<div class="stat">🔵 Player 1 <b id="b1">₹20</b></div><div class="stat">🔴 Player 2 <b id="b2">₹20</b></div><div class="stat">Round <b id="round">0/30</b></div>
+</div></div>
+<div class="card player"><div class="muted" id="status"></div><div class="name" id="name"></div><div class="muted" id="meta"></div><div class="price" id="price">₹0</div><div id="bidder" class="muted"></div>
+<div class="actions"><button class="primary" id="start">Start Auction</button><button id="bid">Bid</button><button id="skip">Skip</button><button class="primary" id="sell">Sell</button><button id="reset">New Auction</button></div>
+<p id="msg"></p></div>
+<div class="card"><h3>🔵 Player 1 Squad</h3><ul id="s1"></ul></div><div class="card"><h3>🔴 Player 2 Squad</h3><ul id="s2"></ul></div></div>
+<div class="card"><h3>Auction History</h3><div style="overflow:auto"><table><thead><tr><th>#</th><th>Player</th><th>Result</th><th>Price</th></tr></thead><tbody id="history"></tbody></table></div></div>
+</div>
+<script>
+const socket=io();let me=null;
+const $=id=>document.getElementById(id);
+function showGame(){ $("lobby").classList.add("hidden");$("game").classList.remove("hidden"); }
+$("create").onclick=()=>socket.emit("createRoom",null,r=>{if(!r.ok)return $("lobbyMsg").textContent=r.error;me=r.num;$("lobbyMsg").textContent=`Room ${r.room} created. Send this code to Player 2.`;showGame()});
+$("join").onclick=()=>socket.emit("joinRoom",$("roomInput").value,r=>{if(!r.ok)return $("lobbyMsg").textContent=r.error;me=r.num;showGame()});
+$("start").onclick=()=>socket.emit("start");$("bid").onclick=()=>socket.emit("bid");$("skip").onclick=()=>socket.emit("skip");$("sell").onclick=()=>socket.emit("sell");$("reset").onclick=()=>socket.emit("reset");
+socket.on("errorMsg",m=>$("msg").textContent=m);
+socket.on("state",s=>{
+ $("status").textContent=`Room ${s.room} • ${s.playersConnected}/2 connected • ${s.message}`;
+ $("b1").textContent=`₹${s.budgets[1]}`;$("b2").textContent=`₹${s.budgets[2]}`;$("round").textContent=`${s.round}/30`;
+ $("name").textContent=s.current?s.current[1]+" "+s.current[0]:(s.phase==="match_ready"?"🏆 Auction Complete":"Waiting...");
+ $("meta").textContent=s.current?s.current[2]:"";
+ $("price").textContent=s.current?`₹${s.bid||1}`:"₹0";
+ $("bidder").textContent=s.bidder?`Current bidder: Player ${s.bidder}`:"";
+ $("start").disabled=!(me===1&&s.playersConnected===2&&s.phase==="lobby");
+ $("bid").disabled=!(s.phase==="auction"&&s.bidder!==me&&s.budgets[me]>(s.bid||0)&&s.squads[me].length<10);
+ $("skip").disabled=s.phase!=="auction";$("sell").disabled=!(s.phase==="auction"&&s.bidder);
+ const list=(arr,id)=>$(id).innerHTML=`<li><strong>${arr.length}/10 players</strong></li>`+(arr.length?arr.map(x=>`<li>${x.player[1]} ${x.player[0]} — ₹${x.price}</li>`).join(""):"<li>Empty</li>");
+ list(s.squads[1],"s1");list(s.squads[2],"s2");
+ $("history").innerHTML=s.sold.map(x=>`<tr><td>${x.round}</td><td>${x.player[1]} ${x.player[0]}</td><td>Player ${x.to}</td><td>₹${x.price}</td></tr>`).join("")+
+ s.skipped.map(x=>`<tr><td>${x.round}</td><td>${x.player[1]} ${x.player[0]}</td><td>Skipped</td><td>—</td></tr>`).join("");
+ $("msg").textContent=s.message;
+});
+</script></main></body></html>
